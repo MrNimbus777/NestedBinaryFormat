@@ -7,7 +7,7 @@
 
 #define NBF_FILE_EXTENSION ".nbf"
 
-#define NBF_TYPE_FAMILY_EMBPTY                                                                    \
+#define NBF_TYPE_FAMILY_EMPTY                                                                    \
     X(EMPTY, void*)
 
 #define NBF_TYPE_FAMILY_STRUCT                                                                    \
@@ -37,7 +37,7 @@
     NBF_TYPE_FAMILY_FLOAT
 
 #define NBF_TYPE_FAMILY                                                                           \
-    NBF_TYPE_FAMILY_EMBPTY                                                                        \
+    NBF_TYPE_FAMILY_EMPTY                                                                        \
     NBF_TYPE_FAMILY_STRUCT                                                                        \
     NBF_TYPE_FAMILY_CHAR                                                                          \
     NBF_TYPE_FAMILY_NUMERIC
@@ -319,7 +319,7 @@ NBF_TYPE_FAMILY_CHAR
 static void nbf_free_ignored_(nbf_typeless_value_t* ignored){(void)ignored;}
 static const nbf_free_type_f NBF_FREE_FUNCTION_TABLE[NBF_TYPES_COUNT] = {
     #define X(x1, x2) nbf_free_ignored_,
-    NBF_TYPE_FAMILY_EMBPTY
+    NBF_TYPE_FAMILY_EMPTY
     #undef X
     #define X(x1, x2) nbf_free_##x1,
     NBF_TYPE_FAMILY_STRUCT
