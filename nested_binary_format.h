@@ -58,7 +58,6 @@ typedef struct nbf_raw_t {
     byte*    data;
     uint32_t size;
 } nbf_raw_t;
-#define AS_BYTES(value) ((byte*)&(typeof(value)){ value })
 static void printf_bytes(byte* data, size_t size){
     if(size > 0){
         printf("%02X", data[0]);
@@ -66,13 +65,6 @@ static void printf_bytes(byte* data, size_t size){
             printf(" %02X", data[i]);
         }
     }
-}
-
-static byte* string_as_bytes(char* in, byte* out, size_t n){
-    for(char* c = in; *c != 0; c++){
-        out[c-in] = *AS_BYTES(*c);
-    }
-    return out;
 }
 
 typedef struct nbf_typeless_value_t nbf_typeless_value_t;
@@ -428,13 +420,17 @@ nbf_value_t nbf_decode_NODE(byte** buffer){
 
     nbf_field_t* fields = malloc(size*sizeof(nbf_field_t));
 
-    for(uint16_t i = 0; i < size; i++){    
+    for(uint16_t i = 0; i < size; i++){
+        printf("DECODING: %hu\n", i);
         uint16_t name_len = nbf_read_16(*buffer);
         *buffer += sizeof(uint16_t);
+        printf("reading the %hu bytes name...\n", name_len);
         
         char* name = nbf_memcpy(malloc((name_len+1)*sizeof(char)), *buffer, name_len);
+        printf("read the name!\n");
         name[name_len] = 0;
         *buffer += name_len;
+        printf("Name: %s\n", name);
 
         fields[i] = (nbf_field_t) {
             .name = name,
@@ -507,56 +503,56 @@ nbf_value_t nbf_decode_STRING(byte** buffer){
 }
 
 nbf_value_t nbf_decode_INT8(byte** buffer){
-    int8_t val = *((int8_t*)(*buffer));
+    int8_t val = nbf_read_8(*buffer);
     (*buffer) += sizeof(int8_t);
     return NBF_INT8(val);
 }
 nbf_value_t nbf_decode_INT16(byte** buffer){
-    int16_t val = *((int16_t*)(*buffer));
+    int16_t val = nbf_read_16(*buffer);
     (*buffer) += sizeof(int16_t);
     return NBF_INT16(val);
 }
 nbf_value_t nbf_decode_INT32(byte** buffer){
-    int32_t val = *((int32_t*)(*buffer));
+    int32_t val = nbf_read_32(*buffer);
     (*buffer) += sizeof(int32_t);
     return NBF_INT32(val);
 }
 nbf_value_t nbf_decode_INT64(byte** buffer){
-    int64_t val = *((int64_t*)(*buffer));
+    int64_t val = nbf_read_64(*buffer);
     (*buffer) += sizeof(int64_t);
     return NBF_INT64(val);
 }
 nbf_value_t nbf_decode_UINT8(byte** buffer){
-    uint8_t val = *((uint8_t*)(*buffer));
+    uint8_t val = nbf_read_8(*buffer);
     (*buffer) += sizeof(uint8_t);
     return NBF_UINT8(val);
 }
 nbf_value_t nbf_decode_UINT16(byte** buffer){
-    uint16_t val = *((uint16_t*)(*buffer));
+    uint16_t val = nbf_read_16(*buffer);
     (*buffer) += sizeof(uint16_t);
     return NBF_UINT16(val);
 }
 nbf_value_t nbf_decode_UINT32(byte** buffer){
-    uint32_t val = *((uint32_t*)(*buffer));
+    uint32_t val = nbf_read_32(*buffer);
     (*buffer) += sizeof(uint32_t);
     return NBF_UINT32(val);
 }
 nbf_value_t nbf_decode_UINT64(byte** buffer){
-    uint64_t val = *((uint64_t*)(*buffer));
+    uint64_t val = nbf_read_64(*buffer);
     (*buffer) += sizeof(uint64_t);
     return NBF_UINT64(val);
 }
 
 nbf_value_t nbf_decode_FLOAT32(byte** buffer){
-    float val = *((float*)(*buffer));
-    (*buffer) += sizeof(float);
-    return NBF_FLOAT32(val);
+    uint32_t tmp = nbf_read_32(*buffer);
+    (*buffer) += sizeof(uint32_t);
+    return NBF_FLOAT32(*(float*)&tmp);
 }
 
 nbf_value_t nbf_decode_FLOAT64(byte** buffer){
-    double val = *((double*)(*buffer));
-    (*buffer) += sizeof(double);
-    return NBF_FLOAT64(val);
+    uint64_t tmp = nbf_read_64(*buffer);
+    (*buffer) += sizeof(uint64_t);
+    return NBF_FLOAT64(*(double*)&tmp);
 }
 
 
@@ -565,6 +561,7 @@ void nbf_free_NODE(nbf_typeless_value_t* value){
     if(value->__ownership == NBF_OWNERDHIP_UNDEFINED) return;
     nbf_node_t node = value->NODE;
     for(uint16_t i = 0; i < node.size; i++) {
+        free(node.fields[i].name);
         nbf_free(&node.fields[i].value);
     }
     free(node.fields);
@@ -765,55 +762,55 @@ size_t nbf_sizeof_STRING(nbf_typeless_value_t* value){
            1;                 // header
 }
 size_t nbf_sizeof_INT8(nbf_typeless_value_t* value){
-    static size_t size = sizeof(int8_t) +   // value
-                         1;                 // header
+    static size_t size = sizeof(int8_t) +     // value
+                         1;                   // header
     return size;
 }
 size_t nbf_sizeof_INT16(nbf_typeless_value_t* value){
-    static size_t size = sizeof(int16_t) +   // value
-                         1;                 // header
+    static size_t size = sizeof(int16_t) +    // value
+                         1;                   // header
     return size;
 }
 size_t nbf_sizeof_INT32(nbf_typeless_value_t* value){
-    static size_t size = sizeof(int32_t) +   // value
-                         1;                 // header
+    static size_t size = sizeof(int32_t) +    // value
+                         1;                   // header
     return size;
 }
 size_t nbf_sizeof_INT64(nbf_typeless_value_t* value){
-    static size_t size = sizeof(int64_t) +   // value
-                         1;                 // header
+    static size_t size = sizeof(int64_t) +    // value
+                         1;                   // header
     return size;
 }
 size_t nbf_sizeof_UINT8(nbf_typeless_value_t* value){
-    static size_t size = sizeof(uint8_t) +   // value
-                         1;                 // header
+    static size_t size = sizeof(uint8_t) +    // value
+                         1;                   // header
     return size;
 }
 size_t nbf_sizeof_UINT16(nbf_typeless_value_t* value){
     static size_t size = sizeof(uint16_t) +   // value
-                         1;                 // header
+                         1;                   // header
     return size;
 }
 size_t nbf_sizeof_UINT32(nbf_typeless_value_t* value){
     static size_t size = sizeof(uint32_t) +   // value
-                         1;                 // header
+                         1;                   // header
     return size;
 }
 size_t nbf_sizeof_UINT64(nbf_typeless_value_t* value){
     static size_t size = sizeof(uint64_t) +   // value
-                         1;                 // header
+                         1;                   // header
     return size;
 }
 
 size_t nbf_sizeof_FLOAT32(nbf_typeless_value_t* value){
-    static size_t size = sizeof(float) +   // value
-                         1;                 // header
+    static size_t size = sizeof(float) +      // value
+                         1;                   // header
     return size;
 }
 
 size_t nbf_sizeof_FLOAT64(nbf_typeless_value_t* value){
-    static size_t size = sizeof(double) +   // value
-                         1;                 // header
+    static size_t size = sizeof(double) +     // value
+                         1;                   // header
     return size;
 }
 
