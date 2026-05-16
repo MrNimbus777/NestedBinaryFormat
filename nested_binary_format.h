@@ -130,12 +130,12 @@ void nbf_print(nbf_value_t* value);
     .name = (name_),                                                                              \
     .value = (nbf_value_t)(value_),                                                               \
 })
-#define NBF_NODE(...) ((nbf_value_t){                                                             \
+#define NBF_STACK_NODE(...) ((nbf_value_t){                                                       \
     .type = NBF_TYPES_NODE,                                                                       \
     .typeless_value.NODE = (nbf_node_t){                                                          \
         .fields = (nbf_field_t[]){ __VA_ARGS__ },                                                 \
         .size = sizeof((nbf_field_t[]){ __VA_ARGS__ }) / sizeof(nbf_field_t)                      \
-    },                                                                                             \
+    },                                                                                            \
     .typeless_value.__ownership = NBF_OWNERDHIP_UNDEFINED                                         \
 })
 
@@ -146,7 +146,7 @@ static inline nbf_typeless_value_t* nbf_value_to_typeless_value(nbf_value_t* val
     }
     return as_typeless;
 }
-#define NBF_LIST(first_element, ...) ((nbf_value_t){                                              \
+#define NBF_STACK_LIST(first_element, ...) ((nbf_value_t){                                        \
     .type = NBF_TYPES_LIST,                                                                       \
     .typeless_value.LIST = (nbf_list_t){                                                          \
         .values = nbf_value_to_typeless_value(                                                    \
@@ -159,7 +159,7 @@ static inline nbf_typeless_value_t* nbf_value_to_typeless_value(nbf_value_t* val
     .typeless_value.__ownership = NBF_OWNERDHIP_UNDEFINED                                         \
 })
 
-#define NBF_RAW(...) ((nbf_value_t){                                                              \
+#define NBF_STACK_RAW(...) ((nbf_value_t){                                                        \
     .type = NBF_TYPES_RAW,                                                                        \
     .typeless_value.RAW = (nbf_raw_t) {                                                           \
         .data = (byte[]){ __VA_ARGS__ },                                                          \
@@ -167,7 +167,7 @@ static inline nbf_typeless_value_t* nbf_value_to_typeless_value(nbf_value_t* val
     },                                                                                            \
     .typeless_value.__ownership = NBF_OWNERDHIP_UNDEFINED                                         \
 })
-#define NBF_BYTES_TO_RAW(bytes_ptr, size) ((nbf_value_t){                                         \
+#define NBF_RAW(bytes_ptr, size) ((nbf_value_t){                                                  \
     .type = NBF_TYPES_RAW,                                                                        \
     .typeless_value.RAW = (nbf_raw_t) {                                                           \
         .data = bytes_ptr,                                                                        \
@@ -241,23 +241,23 @@ static inline nbf_typeless_value_t* nbf_value_to_typeless_value(nbf_value_t* val
     typedef struct nbf_field_t          field_t;
     typedef struct nbf_list_t           list_t;
     typedef struct nbf_raw_t            raw_t;
-    #define EMPTY()                       NBF_EMPTY()
-    #define FIELD(name_, value_)          NBF_FIELD(name_, value_)
-    #define NODE(...)                     NBF_NODE(__VA_ARGS__)
-    #define LIST(first_element, ...)      NBF_LIST(first_element, __VA_ARGS__)
-    #define RAW(...)                      NBF_RAW(__VA_ARGS__)
-    #define BYTES_TO_RAW(bytes_ptr, size) NBF_BYTES_TO_RAW(bytes_ptr, size)
-    #define STRING(v)                     NBF_STRING(v)
-    #define INT8(v)                       NBF_INT8(v)
-    #define INT16(v)                      NBF_INT16(v)
-    #define INT32(v)                      NBF_INT32(v)
-    #define INT64(v)                      NBF_INT64(v)
-    #define UINT8(v)                      NBF_UINT8(v)
-    #define UINT16(v)                     NBF_UINT16(v)
-    #define UINT32(v)                     NBF_UINT32(v)
-    #define UINT64(v)                     NBF_UINT64(v)
-    #define FLOAT32(v)                    NBF_FLOAT32(v)
-    #define FLOAT64(v)                    NBF_FLOAT64(v)
+    #define EMPTY()                        NBF_EMPTY()
+    #define FIELD(name_, value_)           NBF_FIELD(name_, value_)
+    #define STACK_NODE(...)                NBF_STACK_NODE(__VA_ARGS__)
+    #define STACK_LIST(first_element, ...) NBF_STACK_LIST(first_element, __VA_ARGS__)
+    #define STACK_RAW(...)                 NBF_STACK_RAW(__VA_ARGS__)
+    #define RAW(bytes_ptr, size)           NBF_RAW(bytes_ptr, size)
+    #define STRING(v)                      NBF_STRING(v)
+    #define INT8(v)                        NBF_INT8(v)
+    #define INT16(v)                       NBF_INT16(v)
+    #define INT32(v)                       NBF_INT32(v)
+    #define INT64(v)                       NBF_INT64(v)
+    #define UINT8(v)                       NBF_UINT8(v)
+    #define UINT16(v)                      NBF_UINT16(v)
+    #define UINT32(v)                      NBF_UINT32(v)
+    #define UINT64(v)                      NBF_UINT64(v)
+    #define FLOAT32(v)                     NBF_FLOAT32(v)
+    #define FLOAT64(v)                     NBF_FLOAT64(v)
 #endif // NBF_STRIP_PREFIXES
 
 #ifdef NBF_IMPLEMENTATION
@@ -421,16 +421,12 @@ nbf_value_t nbf_decode_NODE(byte** buffer){
     nbf_field_t* fields = malloc(size*sizeof(nbf_field_t));
 
     for(uint16_t i = 0; i < size; i++){
-        printf("DECODING: %hu\n", i);
         uint16_t name_len = nbf_read_16(*buffer);
         *buffer += sizeof(uint16_t);
-        printf("reading the %hu bytes name...\n", name_len);
         
         char* name = nbf_memcpy(malloc((name_len+1)*sizeof(char)), *buffer, name_len);
-        printf("read the name!\n");
         name[name_len] = 0;
         *buffer += name_len;
-        printf("Name: %s\n", name);
 
         fields[i] = (nbf_field_t) {
             .name = name,
