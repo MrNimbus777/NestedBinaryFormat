@@ -7,7 +7,7 @@
 
 #define NBF_FILE_EXTENSION ".nbf"
 
-#define NBF_TYPE_FAMILY_EMPTY                                                                    \
+#define NBF_TYPE_FAMILY_EMBPTY                                                                    \
     X(EMPTY, void*)
 
 #define NBF_TYPE_FAMILY_STRUCT                                                                    \
@@ -37,7 +37,7 @@
     NBF_TYPE_FAMILY_FLOAT
 
 #define NBF_TYPE_FAMILY                                                                           \
-    NBF_TYPE_FAMILY_EMPTY                                                                        \
+    NBF_TYPE_FAMILY_EMBPTY                                                                        \
     NBF_TYPE_FAMILY_STRUCT                                                                        \
     NBF_TYPE_FAMILY_CHAR                                                                          \
     NBF_TYPE_FAMILY_NUMERIC
@@ -113,7 +113,7 @@ struct nbf_field_t {
     nbf_value_t value;
 };
 
-nbf_value_t nbf_decode(byte** buffer);
+nbf_value_t nbf_decode(byte** cursor);
 byte* nbf_encode(nbf_value_t* value, byte* buffer);
 size_t nbf_sizeof(nbf_value_t* value);
 void nbf_free(nbf_value_t* value);
@@ -261,6 +261,7 @@ static inline nbf_typeless_value_t* nbf_value_to_typeless_value(nbf_value_t* val
 #endif // NBF_STRIP_PREFIXES
 
 #ifdef NBF_IMPLEMENTATION
+#include <inttypes.h>
 // DECLARE DECODE FUNCTIONS AND FUNCTION TABLE
 
 typedef nbf_value_t(*nbf_decode_type_f)(byte**);
@@ -319,7 +320,7 @@ NBF_TYPE_FAMILY_CHAR
 static void nbf_free_ignored_(nbf_typeless_value_t* ignored){(void)ignored;}
 static const nbf_free_type_f NBF_FREE_FUNCTION_TABLE[NBF_TYPES_COUNT] = {
     #define X(x1, x2) nbf_free_ignored_,
-    NBF_TYPE_FAMILY_EMPTY
+    NBF_TYPE_FAMILY_EMBPTY
     #undef X
     #define X(x1, x2) nbf_free_##x1,
     NBF_TYPE_FAMILY_STRUCT
@@ -409,28 +410,28 @@ static inline uint8_t nbf_read_8(const byte* buf) {
 
 
 
-nbf_value_t nbf_decode_EMPTY(byte** buffer){
-    *buffer += 0;
+nbf_value_t nbf_decode_EMPTY(byte** cursor){
+    *cursor += 0;
     return NBF_EMPTY();
 }
 
-nbf_value_t nbf_decode_NODE(byte** buffer){
-    uint16_t size = nbf_read_16(*buffer);
-    *buffer += sizeof(uint16_t);
+nbf_value_t nbf_decode_NODE(byte** cursor){
+    uint16_t size = nbf_read_16(*cursor);
+    *cursor += sizeof(uint16_t);
 
     nbf_field_t* fields = malloc(size*sizeof(nbf_field_t));
 
     for(uint16_t i = 0; i < size; i++){
-        uint16_t name_len = nbf_read_16(*buffer);
-        *buffer += sizeof(uint16_t);
+        uint16_t name_len = nbf_read_16(*cursor);
+        *cursor += sizeof(uint16_t);
         
-        char* name = nbf_memcpy(malloc((name_len+1)*sizeof(char)), *buffer, name_len);
+        char* name = nbf_memcpy(malloc((name_len+1)*sizeof(char)), *cursor, name_len);
         name[name_len] = 0;
-        *buffer += name_len;
+        *cursor += name_len;
 
         fields[i] = (nbf_field_t) {
             .name = name,
-            .value = nbf_decode(buffer)
+            .value = nbf_decode(cursor)
         };
     }
 
@@ -444,17 +445,17 @@ nbf_value_t nbf_decode_NODE(byte** buffer){
     };
 }
 
-nbf_value_t nbf_decode_LIST(byte** buffer){
-    uint16_t size = nbf_read_16(*buffer);
-    *buffer += sizeof(uint16_t);
+nbf_value_t nbf_decode_LIST(byte** cursor){
+    uint16_t size = nbf_read_16(*cursor);
+    *cursor += sizeof(uint16_t);
 
-    uint8_t type = nbf_read_8(*buffer);
-    *buffer += sizeof(uint8_t);
+    uint8_t type = nbf_read_8(*cursor);
+    *cursor += sizeof(uint8_t);
 
     nbf_typeless_value_t* values = malloc(size*sizeof(nbf_typeless_value_t));
 
     for(uint16_t i = 0; i < size; i++){
-        values[i] = NBF_DECODE_FUNCTION_TABLE[type](buffer).typeless_value;
+        values[i] = NBF_DECODE_FUNCTION_TABLE[type](cursor).typeless_value;
     }
 
     return (nbf_value_t){
@@ -468,10 +469,10 @@ nbf_value_t nbf_decode_LIST(byte** buffer){
     };
 }
 
-nbf_value_t nbf_decode_RAW(byte** buffer){
-    uint32_t size = sizeof(byte)*nbf_read_32(*buffer);
-    byte* bytes = nbf_memcpy(malloc(size), (*buffer)+2, size);
-    (*buffer)+=sizeof(uint16_t)+size;
+nbf_value_t nbf_decode_RAW(byte** cursor){
+    uint32_t size = sizeof(byte)*nbf_read_32(*cursor);
+    byte* bytes = nbf_memcpy(malloc(size), (*cursor)+2, size);
+    (*cursor)+=sizeof(uint16_t)+size;
     return (nbf_value_t){
         .type = NBF_TYPES_RAW,
         .typeless_value = (nbf_typeless_value_t) {
@@ -484,11 +485,11 @@ nbf_value_t nbf_decode_RAW(byte** buffer){
     };
 }
 
-nbf_value_t nbf_decode_STRING(byte** buffer){
-    uint32_t size = sizeof(char)*nbf_read_32(*buffer);
-    char* str = nbf_memcpy(malloc(size+sizeof(char)), (*buffer)+sizeof(uint32_t), size);
+nbf_value_t nbf_decode_STRING(byte** cursor){
+    uint32_t size = sizeof(char)*nbf_read_32(*cursor);
+    char* str = nbf_memcpy(malloc(size+sizeof(char)), (*cursor)+sizeof(uint32_t), size);
     str[size] = 0;
-    (*buffer)+=sizeof(uint32_t)+size;
+    (*cursor)+=sizeof(uint32_t)+size;
     return (nbf_value_t){
         .type = NBF_TYPES_STRING,
         .typeless_value = (nbf_typeless_value_t) {
@@ -498,56 +499,56 @@ nbf_value_t nbf_decode_STRING(byte** buffer){
     };
 }
 
-nbf_value_t nbf_decode_INT8(byte** buffer){
-    int8_t val = nbf_read_8(*buffer);
-    (*buffer) += sizeof(int8_t);
+nbf_value_t nbf_decode_INT8(byte** cursor){
+    int8_t val = nbf_read_8(*cursor);
+    (*cursor) += sizeof(int8_t);
     return NBF_INT8(val);
 }
-nbf_value_t nbf_decode_INT16(byte** buffer){
-    int16_t val = nbf_read_16(*buffer);
-    (*buffer) += sizeof(int16_t);
+nbf_value_t nbf_decode_INT16(byte** cursor){
+    int16_t val = nbf_read_16(*cursor);
+    (*cursor) += sizeof(int16_t);
     return NBF_INT16(val);
 }
-nbf_value_t nbf_decode_INT32(byte** buffer){
-    int32_t val = nbf_read_32(*buffer);
-    (*buffer) += sizeof(int32_t);
+nbf_value_t nbf_decode_INT32(byte** cursor){
+    int32_t val = nbf_read_32(*cursor);
+    (*cursor) += sizeof(int32_t);
     return NBF_INT32(val);
 }
-nbf_value_t nbf_decode_INT64(byte** buffer){
-    int64_t val = nbf_read_64(*buffer);
-    (*buffer) += sizeof(int64_t);
+nbf_value_t nbf_decode_INT64(byte** cursor){
+    int64_t val = nbf_read_64(*cursor);
+    (*cursor) += sizeof(int64_t);
     return NBF_INT64(val);
 }
-nbf_value_t nbf_decode_UINT8(byte** buffer){
-    uint8_t val = nbf_read_8(*buffer);
-    (*buffer) += sizeof(uint8_t);
+nbf_value_t nbf_decode_UINT8(byte** cursor){
+    uint8_t val = nbf_read_8(*cursor);
+    (*cursor) += sizeof(uint8_t);
     return NBF_UINT8(val);
 }
-nbf_value_t nbf_decode_UINT16(byte** buffer){
-    uint16_t val = nbf_read_16(*buffer);
-    (*buffer) += sizeof(uint16_t);
+nbf_value_t nbf_decode_UINT16(byte** cursor){
+    uint16_t val = nbf_read_16(*cursor);
+    (*cursor) += sizeof(uint16_t);
     return NBF_UINT16(val);
 }
-nbf_value_t nbf_decode_UINT32(byte** buffer){
-    uint32_t val = nbf_read_32(*buffer);
-    (*buffer) += sizeof(uint32_t);
+nbf_value_t nbf_decode_UINT32(byte** cursor){
+    uint32_t val = nbf_read_32(*cursor);
+    (*cursor) += sizeof(uint32_t);
     return NBF_UINT32(val);
 }
-nbf_value_t nbf_decode_UINT64(byte** buffer){
-    uint64_t val = nbf_read_64(*buffer);
-    (*buffer) += sizeof(uint64_t);
+nbf_value_t nbf_decode_UINT64(byte** cursor){
+    uint64_t val = nbf_read_64(*cursor);
+    (*cursor) += sizeof(uint64_t);
     return NBF_UINT64(val);
 }
 
-nbf_value_t nbf_decode_FLOAT32(byte** buffer){
-    uint32_t tmp = nbf_read_32(*buffer);
-    (*buffer) += sizeof(uint32_t);
+nbf_value_t nbf_decode_FLOAT32(byte** cursor){
+    uint32_t tmp = nbf_read_32(*cursor);
+    (*cursor) += sizeof(uint32_t);
     return NBF_FLOAT32(*(float*)&tmp);
 }
 
-nbf_value_t nbf_decode_FLOAT64(byte** buffer){
-    uint64_t tmp = nbf_read_64(*buffer);
-    (*buffer) += sizeof(uint64_t);
+nbf_value_t nbf_decode_FLOAT64(byte** cursor){
+    uint64_t tmp = nbf_read_64(*cursor);
+    (*cursor) += sizeof(uint64_t);
     return NBF_FLOAT64(*(double*)&tmp);
 }
 
@@ -585,8 +586,7 @@ void nbf_free_STRING(nbf_typeless_value_t* value){
 
 
 
-byte* nbf_encode_EMPTY(nbf_typeless_value_t* value, byte* buffer){
-    (void)value;
+byte* nbf_encode_EMPTY(nbf_typeless_value_t*, byte* buffer){
     *buffer = 0;
     return buffer;
 }
@@ -708,8 +708,7 @@ byte* nbf_encode_FLOAT64(nbf_typeless_value_t* value, byte* buffer){
 
 
 
-size_t nbf_sizeof_EMPTY(nbf_typeless_value_t* value){
-    (void)value;
+size_t nbf_sizeof_EMPTY(nbf_typeless_value_t*){
     return 1; // header only which is 0x00
 }
 
@@ -757,54 +756,54 @@ size_t nbf_sizeof_STRING(nbf_typeless_value_t* value){
            sizeof(uint32_t) + // string len
            1;                 // header
 }
-size_t nbf_sizeof_INT8(nbf_typeless_value_t* value){
+size_t nbf_sizeof_INT8(nbf_typeless_value_t*){
     static size_t size = sizeof(int8_t) +     // value
                          1;                   // header
     return size;
 }
-size_t nbf_sizeof_INT16(nbf_typeless_value_t* value){
+size_t nbf_sizeof_INT16(nbf_typeless_value_t*){
     static size_t size = sizeof(int16_t) +    // value
                          1;                   // header
     return size;
 }
-size_t nbf_sizeof_INT32(nbf_typeless_value_t* value){
+size_t nbf_sizeof_INT32(nbf_typeless_value_t*){
     static size_t size = sizeof(int32_t) +    // value
                          1;                   // header
     return size;
 }
-size_t nbf_sizeof_INT64(nbf_typeless_value_t* value){
+size_t nbf_sizeof_INT64(nbf_typeless_value_t*){
     static size_t size = sizeof(int64_t) +    // value
                          1;                   // header
     return size;
 }
-size_t nbf_sizeof_UINT8(nbf_typeless_value_t* value){
+size_t nbf_sizeof_UINT8(nbf_typeless_value_t*){
     static size_t size = sizeof(uint8_t) +    // value
                          1;                   // header
     return size;
 }
-size_t nbf_sizeof_UINT16(nbf_typeless_value_t* value){
+size_t nbf_sizeof_UINT16(nbf_typeless_value_t*){
     static size_t size = sizeof(uint16_t) +   // value
                          1;                   // header
     return size;
 }
-size_t nbf_sizeof_UINT32(nbf_typeless_value_t* value){
+size_t nbf_sizeof_UINT32(nbf_typeless_value_t*){
     static size_t size = sizeof(uint32_t) +   // value
                          1;                   // header
     return size;
 }
-size_t nbf_sizeof_UINT64(nbf_typeless_value_t* value){
+size_t nbf_sizeof_UINT64(nbf_typeless_value_t*){
     static size_t size = sizeof(uint64_t) +   // value
                          1;                   // header
     return size;
 }
 
-size_t nbf_sizeof_FLOAT32(nbf_typeless_value_t* value){
+size_t nbf_sizeof_FLOAT32(nbf_typeless_value_t*){
     static size_t size = sizeof(float) +      // value
                          1;                   // header
     return size;
 }
 
-size_t nbf_sizeof_FLOAT64(nbf_typeless_value_t* value){
+size_t nbf_sizeof_FLOAT64(nbf_typeless_value_t*){
     static size_t size = sizeof(double) +     // value
                          1;                   // header
     return size;
@@ -812,8 +811,7 @@ size_t nbf_sizeof_FLOAT64(nbf_typeless_value_t* value){
 
 
 
-void nbf_print_EMPTY(nbf_typeless_value_t* value){
-    (void)value;
+void nbf_print_EMPTY(nbf_typeless_value_t*){
     printf("null");
 }
 
@@ -854,28 +852,28 @@ void nbf_print_STRING(nbf_typeless_value_t* value){
 }
 
 void nbf_print_INT8(nbf_typeless_value_t* value){
-    printf("%d", value->INT8);
+    printf("%"PRIi8, value->INT8);
 }
 void nbf_print_INT16(nbf_typeless_value_t* value){
-    printf("%d", value->INT16);
+    printf("%"PRIi16, value->INT16);
 }
 void nbf_print_INT32(nbf_typeless_value_t* value){
-    printf("%d", value->INT32);
+    printf("%"PRIi32, value->INT32);
 }
 void nbf_print_INT64(nbf_typeless_value_t* value){
-    printf("%lld", value->INT64);
+    printf("%"PRIi64, value->INT64);
 }
 void nbf_print_UINT8(nbf_typeless_value_t* value){
-    printf("%u", value->INT8);
+    printf("%"PRIu8, value->INT8);
 }
 void nbf_print_UINT16(nbf_typeless_value_t* value){
-    printf("%u", value->INT16);
+    printf("%"PRIu16, value->INT16);
 }
 void nbf_print_UINT32(nbf_typeless_value_t* value){
-    printf("%u", value->INT32);
+    printf("%"PRIu32, value->INT32);
 }
 void nbf_print_UINT64(nbf_typeless_value_t* value){
-    printf("%llu", value->INT64);
+    printf("%"PRIu64, value->INT64);
 }
 
 void nbf_print_FLOAT32(nbf_typeless_value_t* value){
