@@ -14,8 +14,9 @@ NBF provides:
 - explicit memory ownership
 
 ---
-
-# Installation
+# C (nested_binary_format.h)
+---
+## Installation
 
 Include the header in one translation unit with `NBF_IMPLEMENTATION` defined:
 
@@ -39,7 +40,7 @@ You may also want to strip the names, then the inclusion should look like this:
 
 ---
 
-# Basic Example
+## Basic Example
 
 ```c
 #define NBF_STRIP_PREFIXES
@@ -60,7 +61,7 @@ int main(){
     printf("Encoded bytes: "); printf_bytes(buffer, buffer_size); printf("\n");
 
     byte* ptr = buffer;
-    value_t decoded = nbf_decode(&ptr);
+    value_t decoded = nbf_full_decode(&ptr);
 
     printf("Decoded: "); nbf_print(&decoded); printf("\n");
 
@@ -76,10 +77,45 @@ To encode: {"printf": "HELLO WORLD"}
 Encoded bytes: 01 00 01 00 06 70 72 69 6E 74 66 04 00 00 00 0B 48 45 4C 4C 4F 20 57 4F 52 4C 44
 Decoded: {"printf": "HELLO WORLD"}
 ```
+---
+# JavaScript (nested_binary_format.js)
+---
+## Instalation
 
-## Future plans:
+Obviously is as simple as for the C version. 
+Just dowload the `nested_binary_format.js` in your working directory and write at the begin of your script `import { NBF } from "/nested_binary_format.js";`. Don't forget to mark your script with `type="module"`
+---
+
+## Basic Example
+
+```html
+<script type="module">
+import { NBF } from "/nested_binary_format.js";
+
+const value = {printf: "HELLO WORLD"};
+console.log("To encode: ", value);
+
+const encoded = NBF.encode(value);
+
+console.log("Encoded bytes: "); NBF.printBytes(encoded);
+
+const decoded = NBF.decode(encoded);
+
+console.log("Decoded: ", decoded); 
+</script>
+```
+Browser's Console:
+
+```txt
+To encode:  Object { printf: "HELLO WORLD" }
+Encoded bytes:
+01 00 01 00 06 70 72 69 6E 74 66 04 00 00 00 0B 48 45 4C 4C 4F 20 57 4F 52 4C 44
+Decoded:  Object { printf: "HELLO WORLD" }
+```
+---
+### Future plans:
 - To add files related functionality (read, write)
 - To implement partial decoding
 - To integrate a compression algorithm for the binary data
-- To translate this lib into other programming languages (e.g. C++, Java, Go, Rust, JavaScript, Python)
+- To translate this lib into other programming languages (e.g. C++, Java, Go, Rust, Python)
 - To conquer the world.
