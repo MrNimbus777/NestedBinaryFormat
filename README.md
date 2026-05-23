@@ -84,6 +84,7 @@ Decoded: {"printf": "HELLO WORLD"}
 
 Obviously is as simple as for the C version. 
 Just dowload the `nested_binary_format.js` in your working directory and write at the begin of your script `import { NBF } from "/nested_binary_format.js";`. Don't forget to mark your script with `type="module"`
+
 ---
 
 ## Basic Example
@@ -104,6 +105,7 @@ const decoded = NBF.decode(encoded);
 console.log("Decoded: ", decoded); 
 </script>
 ```
+
 Browser's Console:
 
 ```txt
@@ -112,7 +114,9 @@ Encoded bytes:
 01 00 01 00 06 70 72 69 6E 74 66 04 00 00 00 0B 48 45 4C 4C 4F 20 57 4F 52 4C 44
 Decoded:  Object { printf: "HELLO WORLD" }
 ```
+
 ---
+
 ### Future plans:
 - To add files related functionality (read, write)
 - To implement partial decoding
