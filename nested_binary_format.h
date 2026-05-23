@@ -7,7 +7,7 @@
 
 #define NBF_FILE_EXTENSION ".nbf"
 
-#define NBF_TYPE_FAMILY_EMBPTY                                                                    \
+#define NBF_TYPE_FAMILY_EMPTY                                                                    \
     X(EMPTY, void*)
 
 #define NBF_TYPE_FAMILY_STRUCT                                                                    \
@@ -37,7 +37,7 @@
     NBF_TYPE_FAMILY_FLOAT
 
 #define NBF_TYPE_FAMILY                                                                           \
-    NBF_TYPE_FAMILY_EMBPTY                                                                        \
+    NBF_TYPE_FAMILY_EMPTY                                                                        \
     NBF_TYPE_FAMILY_STRUCT                                                                        \
     NBF_TYPE_FAMILY_CHAR                                                                          \
     NBF_TYPE_FAMILY_NUMERIC
