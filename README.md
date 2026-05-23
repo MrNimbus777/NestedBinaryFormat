@@ -15,7 +15,7 @@ NBF provides:
 
 ---
 # C (nested_binary_format.h)
----
+
 ## Installation
 
 Include the header in one translation unit with `NBF_IMPLEMENTATION` defined:
@@ -79,7 +79,7 @@ Decoded: {"printf": "HELLO WORLD"}
 ```
 ---
 # JavaScript (nested_binary_format.js)
----
+
 ## Instalation
 
 Obviously is as simple as for the C version. 
