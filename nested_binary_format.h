@@ -61,7 +61,7 @@ typedef struct nbf_raw_t {
 static void printf_bytes(byte* data, size_t size){
     if(size > 0){
         printf("%02X", data[0]);
-        for(size_t i = 1; i < size; i++) {
+        for(size_t i = 1; i < size; ++i) {
             printf(" %02X", data[i]);
         }
     }
@@ -113,11 +113,22 @@ struct nbf_field_t {
     nbf_value_t value;
 };
 
-nbf_value_t nbf_decode(byte** cursor);
+nbf_value_t nbf_full_decode(byte** cursor);
 byte* nbf_encode(nbf_value_t* value, byte* buffer);
 size_t nbf_sizeof(nbf_value_t* value);
 void nbf_free(nbf_value_t* value);
 void nbf_print(nbf_value_t* value);
+
+typedef enum NBF_FILESYSTEM_ERRORS {
+    NBF_FS_OK = 0,
+    NBF_FS_FILE_NOT_FOUND,
+    NBF_FS_IO_ERROR,
+    NBF_FS_INVALID_FORMAT,
+    NBF_FS_OUT_OF_MEMORY
+} NBF_FILESYSTEM_ERRORS;
+
+int nbf_write_to_file(nbf_value_t* value, char* path);
+int nbf_read_from_file(nbf_value_t* unitialized_value, char* path);
 
 
 // CONSTRUCTORS
@@ -141,7 +152,7 @@ void nbf_print(nbf_value_t* value);
 
 static inline nbf_typeless_value_t* nbf_value_to_typeless_value(nbf_value_t* values, size_t n){
     nbf_typeless_value_t* as_typeless = (nbf_typeless_value_t*) values;
-    for(size_t i = 1; i < n; i++) {
+    for(size_t i = 1; i < n; ++i) {
         as_typeless[i] = *(nbf_typeless_value_t*)(values+i);
     }
     return as_typeless;
@@ -273,8 +284,8 @@ static const nbf_decode_type_f NBF_DECODE_FUNCTION_TABLE[NBF_TYPES_COUNT] = {
     NBF_TYPE_FAMILY
     #undef X
 };
-nbf_value_t nbf_decode(byte** buffer){
-    return NBF_DECODE_FUNCTION_TABLE[*((*buffer)++)](buffer);
+nbf_value_t nbf_full_decode(byte** cursor){
+    return NBF_DECODE_FUNCTION_TABLE[*((*cursor)++)](cursor);
 }
 
 
@@ -409,6 +420,52 @@ static inline uint8_t nbf_read_8(const byte* buf) {
 }
 
 
+int nbf_write_to_file(nbf_value_t* value, char* path){
+    size_t size = nbf_sizeof(value);
+    byte buffer[size];
+    nbf_encode(value, buffer);
+    
+    FILE* f = fopen(path, "wb");
+    
+    if(f == NULL) return 1;
+
+    if(fwrite(buffer, 1, size, f) != size){
+        fclose(f);
+        return NBF_FS_IO_ERROR;
+    }
+    fclose(f);
+    return 0;
+}
+int nbf_read_from_file(nbf_value_t* out, char* path){
+    FILE* f = fopen(path, "rb");
+    if (!f) {
+        return NBF_FS_FILE_NOT_FOUND;
+    }
+
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    rewind(f);
+
+    if (size <= 0) {
+        fclose(f);
+        return NBF_FS_IO_ERROR;
+    }
+
+    byte buffer[size];
+
+    if (fread(buffer, 1, (size_t)size, f) != (size_t)size) {
+        fclose(f);
+        return NBF_FS_IO_ERROR;
+    }
+
+    fclose(f);
+
+    byte* cursor = buffer;
+
+    *out = nbf_full_decode(&cursor); 
+    return 0;
+}
+
 
 nbf_value_t nbf_decode_EMPTY(byte** cursor){
     *cursor += 0;
@@ -421,7 +478,7 @@ nbf_value_t nbf_decode_NODE(byte** cursor){
 
     nbf_field_t* fields = malloc(size*sizeof(nbf_field_t));
 
-    for(uint16_t i = 0; i < size; i++){
+    for(uint16_t i = 0; i < size; ++i){
         uint16_t name_len = nbf_read_16(*cursor);
         *cursor += sizeof(uint16_t);
         
@@ -431,7 +488,7 @@ nbf_value_t nbf_decode_NODE(byte** cursor){
 
         fields[i] = (nbf_field_t) {
             .name = name,
-            .value = nbf_decode(cursor)
+            .value = nbf_full_decode(cursor)
         };
     }
 
@@ -454,7 +511,7 @@ nbf_value_t nbf_decode_LIST(byte** cursor){
 
     nbf_typeless_value_t* values = malloc(size*sizeof(nbf_typeless_value_t));
 
-    for(uint16_t i = 0; i < size; i++){
+    for(uint16_t i = 0; i < size; ++i){
         values[i] = NBF_DECODE_FUNCTION_TABLE[type](cursor).typeless_value;
     }
 
@@ -557,7 +614,7 @@ nbf_value_t nbf_decode_FLOAT64(byte** cursor){
 void nbf_free_NODE(nbf_typeless_value_t* value){
     if(value->__ownership == NBF_OWNERDHIP_UNDEFINED) return;
     nbf_node_t node = value->NODE;
-    for(uint16_t i = 0; i < node.size; i++) {
+    for(uint16_t i = 0; i < node.size; ++i) {
         free(node.fields[i].name);
         nbf_free(&node.fields[i].value);
     }
@@ -567,7 +624,7 @@ void nbf_free_NODE(nbf_typeless_value_t* value){
 void nbf_free_LIST(nbf_typeless_value_t* value){
     if(value->__ownership == NBF_OWNERDHIP_UNDEFINED) return;
     nbf_list_t list = value->LIST;
-    for(uint16_t i = 0; i < list.size; i++) {
+    for(uint16_t i = 0; i < list.size; ++i) {
         NBF_FREE_FUNCTION_TABLE[list.type](list.values+i);
     }
     free(list.values);
@@ -596,7 +653,7 @@ byte* nbf_encode_NODE(nbf_typeless_value_t* value, byte* buffer){
     nbf_node_t node = value->NODE;
     nbf_write_16(buffer+1, node.size);   // fields count 
     size_t padding = sizeof(uint16_t)+1; // first 3 bytes occupied 
-    for(uint16_t i = 0; i < node.size; i++) {
+    for(uint16_t i = 0; i < node.size; ++i) {
         nbf_field_t field = node.fields[i];
 
         char* str = field.name;
@@ -623,7 +680,7 @@ byte* nbf_encode_LIST(nbf_typeless_value_t* value, byte* buffer){
     size_t padding = sizeof(uint16_t)+1; 
     nbf_write_16(buffer+1, list.size);   // elements count
     nbf_write_8(buffer+3, list.type);    // elements type
-    for(uint16_t i = 0; i < list.size; i++) {
+    for(uint16_t i = 0; i < list.size; ++i) {
         byte tmp = buffer[padding];
         NBF_ENCODE_FUNCTION_TABLE[list.type](list.values+i, buffer+padding);
         buffer[padding] = tmp;
@@ -635,7 +692,7 @@ byte* nbf_encode_LIST(nbf_typeless_value_t* value, byte* buffer){
 byte* nbf_encode_RAW(nbf_typeless_value_t* value, byte* buffer){
     *buffer = NBF_TYPES_RAW;
     nbf_raw_t raw = value->RAW;
-    for(size_t i = 0; i < raw.size; i++) {
+    for(size_t i = 0; i < raw.size; ++i) {
         buffer[sizeof(uint32_t)+i+1] = raw.data[i];
     }
     nbf_write_32(buffer+1, raw.size);   // bytes count
@@ -716,7 +773,7 @@ size_t nbf_sizeof_NODE(nbf_typeless_value_t* value){
     nbf_node_t node = value->NODE;
     size_t size = 1 +               // header
                   sizeof(uint16_t); // fields count
-    for(size_t i = 0; i < node.size; i++){
+    for(size_t i = 0; i < node.size; ++i){
         nbf_field_t field = node.fields[i];
         
         char* str = field.name;
@@ -735,7 +792,7 @@ size_t nbf_sizeof_LIST(nbf_typeless_value_t* value){
     size_t size = 1 +               // header
                   1 +               // type
                   sizeof(uint16_t); // fields count
-    for(size_t i = 0; i < list.size; i++){
+    for(size_t i = 0; i < list.size; ++i){
         size += NBF_SIZEOF_FUNCTION_TABLE[list.type](list.values+i) - 
                 1; // substracting the header as it is already hold in the list.type.
     }
@@ -821,7 +878,7 @@ void nbf_print_NODE(nbf_typeless_value_t* value){
     if(node.size > 0){
         nbf_field_t field = node.fields[0];
         printf("\"%s\": ", field.name); nbf_print(&field.value);
-        for(size_t i = 1; i < node.size; i++) {
+        for(size_t i = 1; i < node.size; ++i) {
             nbf_field_t field = node.fields[i];
             printf(", \"%s\": ", field.name); nbf_print(&field.value);
         }
@@ -834,7 +891,7 @@ void nbf_print_LIST(nbf_typeless_value_t* value){
     printf("[");
     if(list.size > 0){
         NBF_PRINT_FUNCTION_TABLE[list.type](list.values);
-        for(size_t i = 1; i < list.size; i++) {
+        for(size_t i = 1; i < list.size; ++i) {
             printf(", "); NBF_PRINT_FUNCTION_TABLE[list.type](list.values+i);
         }
     }
