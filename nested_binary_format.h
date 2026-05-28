@@ -4,10 +4,11 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 #define NBF_FILE_EXTENSION ".nbf"
 
-#define NBF_TYPE_FAMILY_EMPTY                                                                    \
+#define NBF_TYPE_FAMILY_EMPTY                                                                     \
     X(EMPTY, void*)
 
 #define NBF_TYPE_FAMILY_STRUCT                                                                    \
@@ -37,7 +38,7 @@
     NBF_TYPE_FAMILY_FLOAT
 
 #define NBF_TYPE_FAMILY                                                                           \
-    NBF_TYPE_FAMILY_EMPTY                                                                        \
+    NBF_TYPE_FAMILY_EMPTY                                                                         \
     NBF_TYPE_FAMILY_STRUCT                                                                        \
     NBF_TYPE_FAMILY_CHAR                                                                          \
     NBF_TYPE_FAMILY_NUMERIC
@@ -82,6 +83,7 @@ typedef struct nbf_error_value_t {
 typedef struct nbf_node_t {
     nbf_field_t* fields;
     uint16_t     size;
+    uint16_t     capacity;
 } nbf_node_t; 
 
 typedef struct nbf_list_t {
@@ -91,8 +93,8 @@ typedef struct nbf_list_t {
 } nbf_list_t;
 
 typedef enum nbf_ownership_t {
-    NBF_OWNERDHIP_UNDEFINED,
-    NBF_OWNERDHIP_HEAP
+    NBF_OWNERSHIP_UNDEFINED,
+    NBF_OWNERSHIP_HEAP
 } nbf_ownership_t;
 
 struct nbf_typeless_value_t {
@@ -105,19 +107,58 @@ struct nbf_typeless_value_t {
 }; 
 
 struct nbf_value_t {
-    nbf_typeless_value_t typeless_value;
-    NBF_TYPES            type;
+    union 
+    {
+        nbf_typeless_value_t typeless_value;
+        nbf_typeless_value_t tv;
+    };
+    NBF_TYPES type;
 };
 struct nbf_field_t {
     char*       name;
     nbf_value_t value;
+    nbf_ownership_t __name_ownership;
 };
 
+/*
+Takes in the byte sequence and decodes it into a full NBF structure.
+*/
 nbf_value_t nbf_full_decode(byte** cursor);
 byte* nbf_encode(nbf_value_t* value, byte* buffer);
+/*
+Returns the full size of the provided value and its children.
+*/
 size_t nbf_sizeof(nbf_value_t* value);
+/*
+Frees correctly any value. Safe to call on stack objects.
+*/
 void nbf_free(nbf_value_t* value);
+/*
+Prints the provided value to the standart output.
+*/
 void nbf_print(nbf_value_t* value);
+
+nbf_field_t* nbf_node_get(nbf_value_t* node, char* name);
+/*
+Creates a new field in the node object. Works similar to adding elements to a dynamic array.
+If node contains a field with same name, it replaces it's value, else it add a new element to fields array.
+On success: returns 0
+On failure: returns 1 (malloc/realloc failure)
+*/
+int nbf_node_put(nbf_value_t* node, char* name, nbf_value_t value);
+/* 
+This function marks a field as deleted. Note that is does not actually clear the memory and does no reallocations. It sets field's name to "", to be ignored when encoding.
+On success: returns the deleted field
+On failure: returns NULL
+*/
+nbf_field_t* nbf_node_remove(nbf_value_t* node, char* name);
+/*
+Works similary to nbf_node_remove, but for all fields from node.
+*/
+void nbf_node_clear(nbf_value_t* node);
+#define NBF_NODE_FOREACH(node, field_var_name) for(nbf_field_t* field_var_name = (node).fields; field_var_name < (node).fields+(node).size; field_var_name++)
+
+#define NBF_LIST_FOREACH(node, tv_var_name) for(nbf_field_t* tv_var_name = (node).values; tv_var_name < (node).values+(node).size; tv_var_name++)
 
 typedef enum NBF_FILESYSTEM_ERRORS {
     NBF_FS_OK = 0,
@@ -140,14 +181,16 @@ int nbf_read_from_file(nbf_value_t* unitialized_value, char* path);
 #define NBF_FIELD(name_, value_) ((nbf_field_t){                                                  \
     .name = (name_),                                                                              \
     .value = (nbf_value_t)(value_),                                                               \
+    .__name_ownership = NBF_OWNERSHIP_UNDEFINED                                                   \
 })
 #define NBF_STACK_NODE(...) ((nbf_value_t){                                                       \
     .type = NBF_TYPES_NODE,                                                                       \
     .typeless_value.NODE = (nbf_node_t){                                                          \
         .fields = (nbf_field_t[]){ __VA_ARGS__ },                                                 \
-        .size = sizeof((nbf_field_t[]){ __VA_ARGS__ }) / sizeof(nbf_field_t)                      \
+        .size = sizeof((nbf_field_t[]){ __VA_ARGS__ }) / sizeof(nbf_field_t),                     \
+        .capacity = sizeof((nbf_field_t[]){ __VA_ARGS__ }) / sizeof(nbf_field_t)                  \
     },                                                                                            \
-    .typeless_value.__ownership = NBF_OWNERDHIP_UNDEFINED                                         \
+    .typeless_value.__ownership = NBF_OWNERSHIP_UNDEFINED                                         \
 })
 
 static inline nbf_typeless_value_t* nbf_value_to_typeless_value(nbf_value_t* values, size_t n){
@@ -167,7 +210,7 @@ static inline nbf_typeless_value_t* nbf_value_to_typeless_value(nbf_value_t* val
         .size = 1 + sizeof((nbf_value_t[]){ __VA_ARGS__ }) / sizeof(nbf_value_t),                 \
         .type = first_element.type                                                                \
     },                                                                                            \
-    .typeless_value.__ownership = NBF_OWNERDHIP_UNDEFINED                                         \
+    .typeless_value.__ownership = NBF_OWNERSHIP_UNDEFINED                                         \
 })
 
 #define NBF_STACK_RAW(...) ((nbf_value_t){                                                        \
@@ -176,7 +219,7 @@ static inline nbf_typeless_value_t* nbf_value_to_typeless_value(nbf_value_t* val
         .data = (byte[]){ __VA_ARGS__ },                                                          \
         .size = sizeof((byte[]){ __VA_ARGS__ }) / sizeof(byte)                                    \
     },                                                                                            \
-    .typeless_value.__ownership = NBF_OWNERDHIP_UNDEFINED                                         \
+    .typeless_value.__ownership = NBF_OWNERSHIP_UNDEFINED                                         \
 })
 #define NBF_RAW(bytes_ptr, size) ((nbf_value_t){                                                  \
     .type = NBF_TYPES_RAW,                                                                        \
@@ -184,64 +227,64 @@ static inline nbf_typeless_value_t* nbf_value_to_typeless_value(nbf_value_t* val
         .data = bytes_ptr,                                                                        \
         .size = size                                                                              \
     },                                                                                            \
-    .typeless_value.__ownership = NBF_OWNERDHIP_UNDEFINED                                         \
+    .typeless_value.__ownership = NBF_OWNERSHIP_UNDEFINED                                         \
 })
 #define NBF_STRING(v) ((nbf_value_t){                                                             \
     .type = NBF_TYPES_STRING,                                                                     \
     .typeless_value.STRING = (v),                                                                 \
-    .typeless_value.__ownership = NBF_OWNERDHIP_UNDEFINED                                         \
+    .typeless_value.__ownership = NBF_OWNERSHIP_UNDEFINED                                         \
 })
 
 #define NBF_INT8(v) ((nbf_value_t){                                                               \
     .type = NBF_TYPES_INT8,                                                                       \
     .typeless_value.INT8 = (v),                                                                   \
-    .typeless_value.__ownership = NBF_OWNERDHIP_UNDEFINED                                         \
+    .typeless_value.__ownership = NBF_OWNERSHIP_UNDEFINED                                         \
 })
 #define NBF_INT16(v) ((nbf_value_t){                                                              \
     .type = NBF_TYPES_INT16,                                                                      \
     .typeless_value.INT16 = (v),                                                                  \
-    .typeless_value.__ownership = NBF_OWNERDHIP_UNDEFINED                                         \
+    .typeless_value.__ownership = NBF_OWNERSHIP_UNDEFINED                                         \
 })
 #define NBF_INT32(v) ((nbf_value_t){                                                              \
     .type = NBF_TYPES_INT32,                                                                      \
     .typeless_value.INT32 = (v),                                                                  \
-    .typeless_value.__ownership = NBF_OWNERDHIP_UNDEFINED                                         \
+    .typeless_value.__ownership = NBF_OWNERSHIP_UNDEFINED                                         \
 })
 #define NBF_INT64(v) ((nbf_value_t){                                                              \
     .type = NBF_TYPES_INT64,                                                                      \
     .typeless_value.INT64 = (v),                                                                  \
-    .typeless_value.__ownership = NBF_OWNERDHIP_UNDEFINED                                         \
+    .typeless_value.__ownership = NBF_OWNERSHIP_UNDEFINED                                         \
 })
 #define NBF_UINT8(v) ((nbf_value_t){                                                              \
     .type = NBF_TYPES_UINT8,                                                                      \
     .typeless_value.UINT8 = (v),                                                                  \
-    .typeless_value.__ownership = NBF_OWNERDHIP_UNDEFINED                                         \
+    .typeless_value.__ownership = NBF_OWNERSHIP_UNDEFINED                                         \
 })
 #define NBF_UINT16(v) ((nbf_value_t){                                                             \
     .type = NBF_TYPES_UINT16,                                                                     \
     .typeless_value.UINT16 = (v),                                                                 \
-    .typeless_value.__ownership = NBF_OWNERDHIP_UNDEFINED                                         \
+    .typeless_value.__ownership = NBF_OWNERSHIP_UNDEFINED                                         \
 })
 #define NBF_UINT32(v) ((nbf_value_t){                                                             \
     .type = NBF_TYPES_UINT32,                                                                     \
     .typeless_value.UINT32 = (v),                                                                 \
-    .typeless_value.__ownership = NBF_OWNERDHIP_UNDEFINED                                         \
+    .typeless_value.__ownership = NBF_OWNERSHIP_UNDEFINED                                         \
 })
 #define NBF_UINT64(v) ((nbf_value_t){                                                             \
     .type = NBF_TYPES_UINT64,                                                                     \
     .typeless_value.UINT64 = (v),                                                                 \
-    .typeless_value.__ownership = NBF_OWNERDHIP_UNDEFINED                                         \
+    .typeless_value.__ownership = NBF_OWNERSHIP_UNDEFINED                                         \
 })
 
 #define NBF_FLOAT32(v) ((nbf_value_t){                                                            \
     .type = NBF_TYPES_FLOAT32,                                                                    \
     .typeless_value.FLOAT32 = (v),                                                                \
-    .typeless_value.__ownership = NBF_OWNERDHIP_UNDEFINED                                         \
+    .typeless_value.__ownership = NBF_OWNERSHIP_UNDEFINED                                         \
 })
 #define NBF_FLOAT64(v) ((nbf_value_t){                                                            \
     .type = NBF_TYPES_FLOAT64,                                                                    \
     .typeless_value.FLOAT64 = (v),                                                                \
-    .typeless_value.__ownership = NBF_OWNERDHIP_UNDEFINED                                         \
+    .typeless_value.__ownership = NBF_OWNERSHIP_UNDEFINED                                         \
 })
 
 
@@ -346,8 +389,6 @@ void nbf_free(nbf_value_t* value){
 }
 
 
-// DECLARE PRINT FUNCTIONS AND FUNCTION TABLE
-
 typedef void(*nbf_print_type_f)(nbf_typeless_value_t*);
 #define X(x1, x2) void nbf_print_##x1(nbf_typeless_value_t*);
 NBF_TYPE_FAMILY
@@ -364,6 +405,8 @@ void nbf_print(nbf_value_t* value){
 
 
 static void* nbf_memcpy(byte* dest, const byte* source, size_t n) {
+    if(dest == NULL) return NULL;
+    if(source == NULL) return dest;
     void* start = dest;
     while(n--){
         *(dest++) = *(source++);
@@ -466,6 +509,66 @@ int nbf_read_from_file(nbf_value_t* out, char* path){
     return 0;
 }
 
+// API LAYER FOR NODE
+
+nbf_field_t* nbf_node_get(nbf_value_t* node, char* name){
+    NBF_NODE_FOREACH(node->tv.NODE, field) if(strcmp(field->name, name) == 0) return field;
+    return NULL;
+}
+
+int nbf_node_put(nbf_value_t* node, char* name, nbf_value_t value){
+    nbf_node_t* n = &node->tv.NODE;
+
+    NBF_NODE_FOREACH(*n, f) if(*f->name == 0 || strcmp(f->name, name) == 0) {
+        if(node->tv.__ownership == NBF_OWNERSHIP_HEAP) {
+            free(f->name);
+            nbf_free(&f->value);
+        }
+        f->name  = name;
+        f->value = value; 
+        return 0;
+    }
+    if(n->size+1 > n->capacity){
+        n->capacity *= 2;
+        if(node->tv.__ownership == NBF_OWNERSHIP_HEAP) {
+            nbf_field_t* tmp = realloc(n->fields, sizeof(nbf_field_t)*n->capacity);
+            if(!tmp) return 1;
+            n->fields = tmp;
+        } else {
+            nbf_field_t* tmp = nbf_memcpy(malloc(sizeof(nbf_field_t)*n->capacity), (void*) n->fields, sizeof(nbf_field_t)*n->size);
+            if(!tmp) return 1;
+            n->fields = tmp;
+            node->tv.__ownership = NBF_OWNERSHIP_HEAP;
+        }
+    }
+    n->fields[n->size].name  = name;
+    n->fields[n->size].value = value;
+    ++n->size;
+    return 0;
+}
+nbf_field_t* nbf_node_remove(nbf_value_t* node, char* name){
+    nbf_field_t* field = nbf_node_get(node, name);
+    if(field) {
+        if(field->__name_ownership == NBF_OWNERSHIP_HEAP) {
+            free(field->name);
+            field->__name_ownership = NBF_OWNERSHIP_UNDEFINED;
+        }
+        field->name = "";
+    }
+    return field;
+}
+void nbf_node_clear(nbf_value_t* node){
+    NBF_NODE_FOREACH(node->tv.NODE, field) {
+        if(field->__name_ownership == NBF_OWNERSHIP_HEAP) {
+            free(field->name);
+            field->__name_ownership = NBF_OWNERSHIP_UNDEFINED;
+        }
+        field->name = "";
+    }
+}
+
+
+// PER TYPE FUNCTIONS SLOPE.
 
 nbf_value_t nbf_decode_EMPTY(byte** cursor){
     *cursor += 0;
@@ -488,7 +591,8 @@ nbf_value_t nbf_decode_NODE(byte** cursor){
 
         fields[i] = (nbf_field_t) {
             .name = name,
-            .value = nbf_full_decode(cursor)
+            .value = nbf_full_decode(cursor),
+            .__name_ownership = NBF_OWNERSHIP_HEAP
         };
     }
 
@@ -498,7 +602,7 @@ nbf_value_t nbf_decode_NODE(byte** cursor){
             .fields = fields,
             .size = size
         },
-        .typeless_value.__ownership = NBF_OWNERDHIP_HEAP
+        .typeless_value.__ownership = NBF_OWNERSHIP_HEAP
     };
 }
 
@@ -522,7 +626,7 @@ nbf_value_t nbf_decode_LIST(byte** cursor){
             .size = size,
             .type = type
         },
-        .typeless_value.__ownership = NBF_OWNERDHIP_HEAP
+        .typeless_value.__ownership = NBF_OWNERSHIP_HEAP
     };
 }
 
@@ -537,7 +641,7 @@ nbf_value_t nbf_decode_RAW(byte** cursor){
                 .data = bytes,
                 .size = size
             },
-            .__ownership = NBF_OWNERDHIP_HEAP
+            .__ownership = NBF_OWNERSHIP_HEAP
         }
     };
 }
@@ -551,7 +655,7 @@ nbf_value_t nbf_decode_STRING(byte** cursor){
         .type = NBF_TYPES_STRING,
         .typeless_value = (nbf_typeless_value_t) {
             .STRING = str,
-            .__ownership = NBF_OWNERDHIP_HEAP
+            .__ownership = NBF_OWNERSHIP_HEAP
         }
     };
 }
@@ -612,31 +716,31 @@ nbf_value_t nbf_decode_FLOAT64(byte** cursor){
 
 
 void nbf_free_NODE(nbf_typeless_value_t* value){
-    if(value->__ownership == NBF_OWNERDHIP_UNDEFINED) return;
     nbf_node_t node = value->NODE;
     for(uint16_t i = 0; i < node.size; ++i) {
-        free(node.fields[i].name);
+        if(node.fields[i].__name_ownership == NBF_OWNERSHIP_HEAP) free(node.fields[i].name);
         nbf_free(&node.fields[i].value);
     }
+    if(value->__ownership == NBF_OWNERSHIP_UNDEFINED) return;
     free(node.fields);
 }
 
 void nbf_free_LIST(nbf_typeless_value_t* value){
-    if(value->__ownership == NBF_OWNERDHIP_UNDEFINED) return;
     nbf_list_t list = value->LIST;
     for(uint16_t i = 0; i < list.size; ++i) {
         NBF_FREE_FUNCTION_TABLE[list.type](list.values+i);
     }
+    if(value->__ownership == NBF_OWNERSHIP_UNDEFINED) return;
     free(list.values);
 }
 
 void nbf_free_RAW(nbf_typeless_value_t* value){
-    if(value->__ownership == NBF_OWNERDHIP_UNDEFINED) return;
+    if(value->__ownership == NBF_OWNERSHIP_UNDEFINED) return;
     free(value->RAW.data);
 }
 
 void nbf_free_STRING(nbf_typeless_value_t* value){
-    if(value->__ownership == NBF_OWNERDHIP_UNDEFINED) return;
+    if(value->__ownership == NBF_OWNERSHIP_UNDEFINED) return;
     free(value->STRING);
 }
 
@@ -651,16 +755,22 @@ byte* nbf_encode_EMPTY(nbf_typeless_value_t*, byte* buffer){
 byte* nbf_encode_NODE(nbf_typeless_value_t* value, byte* buffer){
     *buffer = NBF_TYPES_NODE;
     nbf_node_t node = value->NODE;
-    nbf_write_16(buffer+1, node.size);   // fields count 
     size_t padding = sizeof(uint16_t)+1; // first 3 bytes occupied 
+    size_t deleted = 0;
     for(uint16_t i = 0; i < node.size; ++i) {
         nbf_field_t field = node.fields[i];
 
         char* str = field.name;
+        
+        if(*str == 0) {
+            ++deleted;
+            continue;
+        }
+
         uint16_t n = 0;
         n = 0;
         padding += sizeof(uint16_t);
-        for(char* c = str; *c != '\0'; c++) {            
+        for(char* c = str; *c != '\0'; ++c) {            
             buffer[padding+n] = *(byte*)c;
             n++;
         }
@@ -671,6 +781,7 @@ byte* nbf_encode_NODE(nbf_typeless_value_t* value, byte* buffer){
 
         padding += nbf_sizeof(&field.value);
     }
+    nbf_write_16(buffer+1, node.size-deleted);   // fields count 
     return buffer;
 }
 
@@ -777,10 +888,13 @@ size_t nbf_sizeof_NODE(nbf_typeless_value_t* value){
         nbf_field_t field = node.fields[i];
         
         char* str = field.name;
+
+        if(*str == 0) continue;
+
         uint16_t n = 0;
         for(char* c = str; *c != '\0'; c++) n++;
 
-        size += NBF_SIZEOF_FUNCTION_TABLE[field.value.type](&field.value.typeless_value) +
+        size += NBF_SIZEOF_FUNCTION_TABLE[field.value.type](&field.value.tv) +
                 2 + // 2 bytes for name len
                 n;  // name content
     }
@@ -880,7 +994,7 @@ void nbf_print_NODE(nbf_typeless_value_t* value){
         printf("\"%s\": ", field.name); nbf_print(&field.value);
         for(size_t i = 1; i < node.size; ++i) {
             nbf_field_t field = node.fields[i];
-            printf(", \"%s\": ", field.name); nbf_print(&field.value);
+            printf(",\"%s\": ", field.name); nbf_print(&field.value);
         }
     }
     printf("}");
@@ -939,6 +1053,7 @@ void nbf_print_FLOAT32(nbf_typeless_value_t* value){
 void nbf_print_FLOAT64(nbf_typeless_value_t* value){
     printf("%lf", value->FLOAT64);
 }
+;
 #endif
 
 #endif // NESTED_BINARY_FORMAT_H
