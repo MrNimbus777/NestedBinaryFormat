@@ -141,14 +141,16 @@ void nbf_print(nbf_value_t* value);
 nbf_field_t* nbf_node_get(nbf_value_t* node, char* name);
 /*
 Creates a new field in the node object. Works similar to adding elements to a dynamic array.
-If node contains a field with same name, it replaces it's value, else it add a new element to fields array.
+If node contains a field with same name, it replaces it's value, else it adds a new element to fields array.
+Note: If node was initially allocated on the stack, and you add a new field, the whole array of fields will be reallocated on the heap.
 On success: returns 0
 On failure: returns 1 (malloc/realloc failure)
 */
 int nbf_node_put(nbf_value_t* node, char* name, nbf_value_t value);
 /* 
-This function marks a field as deleted. Note that is does not actually clear the memory and does no reallocations. It sets field's name to "", to be ignored when encoding.
-On success: returns the deleted field
+This function marks a field as deleted. Note that is does not actually clear the memory and does no reallocations. 
+It sets field's name to ""(empty string), to be ignored when encoding.
+On success: returns the deleted field (with name being ""(empty string))
 On failure: returns NULL
 */
 nbf_field_t* nbf_node_remove(nbf_value_t* node, char* name);
@@ -295,6 +297,12 @@ static inline nbf_typeless_value_t* nbf_value_to_typeless_value(nbf_value_t* val
     typedef struct nbf_field_t          field_t;
     typedef struct nbf_list_t           list_t;
     typedef struct nbf_raw_t            raw_t;
+    #define node_get     nbf_node_get
+    #define node_put     nbf_node_put
+    #define node_remove  nbf_node_remove
+    #define node_clear   nbf_node_clear
+    #define NODE_FOREACH NBF_NODE_FOREACH
+    #define LIST_FOREACH NBF_LIST_FOREACH
     #define EMPTY()                        NBF_EMPTY()
     #define FIELD(name_, value_)           NBF_FIELD(name_, value_)
     #define STACK_NODE(...)                NBF_STACK_NODE(__VA_ARGS__)
@@ -520,10 +528,8 @@ int nbf_node_put(nbf_value_t* node, char* name, nbf_value_t value){
     nbf_node_t* n = &node->tv.NODE;
 
     NBF_NODE_FOREACH(*n, f) if(*f->name == 0 || strcmp(f->name, name) == 0) {
-        if(node->tv.__ownership == NBF_OWNERSHIP_HEAP) {
-            free(f->name);
-            nbf_free(&f->value);
-        }
+        if(node->tv.__ownership == NBF_OWNERSHIP_HEAP) nbf_free(&f->value);
+        if(f->__name_ownership == NBF_OWNERSHIP_HEAP)  free(f->name);
         f->name  = name;
         f->value = value; 
         return 0;
@@ -991,10 +997,13 @@ void nbf_print_NODE(nbf_typeless_value_t* value){
     printf("{");
     if(node.size > 0){
         nbf_field_t field = node.fields[0];
-        printf("\"%s\": ", field.name); nbf_print(&field.value);
+        if(*field.name != 0){
+            printf("\"%s\":", field.name); nbf_print(&field.value);
+        }
         for(size_t i = 1; i < node.size; ++i) {
             nbf_field_t field = node.fields[i];
-            printf(",\"%s\": ", field.name); nbf_print(&field.value);
+            if(*field.name == 0) continue;
+            printf(", \"%s\":", field.name); nbf_print(&field.value);
         }
     }
     printf("}");
@@ -1035,16 +1044,16 @@ void nbf_print_INT64(nbf_typeless_value_t* value){
     printf("%"PRIi64, value->INT64);
 }
 void nbf_print_UINT8(nbf_typeless_value_t* value){
-    printf("%"PRIu8, value->INT8);
+    printf("%"PRIu8, value->UINT8);
 }
 void nbf_print_UINT16(nbf_typeless_value_t* value){
-    printf("%"PRIu16, value->INT16);
+    printf("%"PRIu16, value->UINT16);
 }
 void nbf_print_UINT32(nbf_typeless_value_t* value){
-    printf("%"PRIu32, value->INT32);
+    printf("%"PRIu32, value->UINT32);
 }
 void nbf_print_UINT64(nbf_typeless_value_t* value){
-    printf("%"PRIu64, value->INT64);
+    printf("%"PRIu64, value->UINT64);
 }
 
 void nbf_print_FLOAT32(nbf_typeless_value_t* value){
