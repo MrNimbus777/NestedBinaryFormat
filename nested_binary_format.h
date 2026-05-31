@@ -138,6 +138,12 @@ Prints the provided value to the standart output.
 */
 void nbf_print(nbf_value_t* value);
 
+
+/* 
+This function return the field with the specified name.
+On success: returns the field
+On failure: returns NULL
+*/
 nbf_field_t* nbf_node_get(nbf_value_t* node, char* name);
 /*
 Creates a new field in the node object. Works similar to adding elements to a dynamic array.
@@ -158,9 +164,24 @@ nbf_field_t* nbf_node_remove(nbf_value_t* node, char* name);
 Works similary to nbf_node_remove, but for all fields from node.
 */
 void nbf_node_clear(nbf_value_t* node);
-#define NBF_NODE_FOREACH(node, field_var_name) for(nbf_field_t* field_var_name = (node).fields; field_var_name < (node).fields+(node).size; field_var_name++)
-
-#define NBF_LIST_FOREACH(node, tv_var_name) for(nbf_field_t* tv_var_name = (node).values; tv_var_name < (node).values+(node).size; tv_var_name++)
+/*
+Expands into a for loop where the iterator is field_var_name that being a nbf_field_t*.
+*/
+#define NBF_NODE_FOREACH(node, field_var_name)       \
+    for(                                             \
+        nbf_field_t* field_var_name = (node).fields; \
+        field_var_name < (node).fields+(node).size;  \
+        field_var_name++                             \
+    )
+/*
+Expands into a for loop where the iterator is typelessvalue_var_name that being a nbf_typeless_value_t*.
+*/
+#define NBF_LIST_FOREACH(node, typelessvalue_var_name)                \
+    for(                                                              \
+        nbf_typeless_value_t* typelessvalue_var_name = (node).values; \
+        typelessvalue_var_name < (node).values+(node).size;           \
+        typelessvalue_var_name++                                      \
+    )
 
 typedef enum NBF_FILESYSTEM_ERRORS {
     NBF_FS_OK = 0,
