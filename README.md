@@ -78,6 +78,52 @@ Encoded bytes: 01 00 01 00 06 70 72 69 6E 74 66 04 00 00 00 0B 48 45 4C 4C 4F 20
 Decoded: {"printf": "HELLO WORLD"}
 ```
 ---
+# Java (nested_binary_format.jar)
+
+## Instalation
+
+Just dowload the `nested_binary_format.jar/nested_binary_format.jar` in your working directory following the rightsteps for installing a local lib for yuor Java project manager (Gradle, Maven...)`
+
+---
+
+## Basic Example
+
+```java
+import net.nimbus.nbf.NestedBinaryFormat;
+import net.nimbus.nbf.value.Value;
+
+import static net.nimbus.nbf.value.Value.*;
+
+public class Main {
+    public static void main(String[] args) {
+
+        Value value = node()
+                .put("printf", "HELLO WORLD");
+
+        System.out.println("To encode: " + value);
+
+        byte[] encoded = NestedBinaryFormat.encode(value);
+
+        System.out.println("Encoded bytes:");
+        System.out.println(NestedBinaryFormat.toHex(encoded));
+
+        Value decoded = NestedBinaryFormat.decode(encoded);
+
+        System.out.println("Decoded: " + decoded);
+    }
+}
+```
+
+Output:
+
+```txt
+To encode:  Object { printf: "HELLO WORLD" }
+Encoded bytes:
+01 00 01 00 06 70 72 69 6E 74 66 04 00 00 00 0B 48 45 4C 4C 4F 20 57 4F 52 4C 44
+Decoded:  Object { printf: "HELLO WORLD" }
+```
+
+---
 # JavaScript (nested_binary_format.js)
 
 ## Instalation
